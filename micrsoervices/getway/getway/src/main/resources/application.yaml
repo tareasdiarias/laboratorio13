@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: categoria-service
+          uri: lb://categoria-service
+          predicates:
+            - Path=/api/categorias/**
+        - id: producto-service
+          uri: lb://producto-service
+          predicates:
+            - Path=/api/productos/**
+
+server:
+  port: 8087
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8086/eureka/
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER}
+  instance:
+    prefer-ip-address: true

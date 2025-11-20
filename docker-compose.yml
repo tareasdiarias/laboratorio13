@@ -1,0 +1,141 @@
+version: '3.8'
+
+services:
+  # PostgreSQL para Categorías
+  postgres-categorias:
+    image: postgres:15-alpine
+    container_name: postgres-categorias
+    environment:
+      POSTGRES_DB: categorias_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - categorias-data:/var/lib/postgresql/data
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL para Productos
+  postgres-productos:
+    image: postgres:15-alpine
+    container_name: postgres-productos
+    environment:
+      POSTGRES_DB: productos_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - productos-data:/var/lib/postgresql/data
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Eureka Server
+  eureka-server:
+    build:
+      context: ./microservices/eureca
+      dockerfile: Dockerfile
+    container_name: eureka-server
+    ports:
+      - "8086:8086"
+    networks:
+      - microservices-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # Categoria Service
+  categoria-service:
+    build:
+      context: ./microservices/service
+      dockerfile: Dockerfile
+    container_name: categoria-service
+    ports:
+      - "8088:8088"
+    networks:
+      - microservices-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_SERVER=http://eureka-server:8086/eureka
+      - DB_HOST=postgres-categorias
+      - DB_PORT=5432
+      - DB_NAME=categorias_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      postgres-categorias:
+        condition: service_healthy
+    restart: on-failure
+
+  # Producto Service
+  producto-service:
+    build:
+      context: ./microservices/Producto
+      dockerfile: Dockerfile
+    container_name: producto-service
+    ports:
+      - "8089:8089"
+    networks:
+      - microservices-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_SERVER=http://eureka-server:8086/eureka
+      - DB_HOST=postgres-productos
+      - DB_PORT=5436
+      - DB_NAME=productos_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      postgres-productos:
+        condition: service_healthy
+    restart: on-failure
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./microservices/getway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    ports:
+      - "8087:8087"
+    networks:
+      - microservices-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_SERVER=http://eureka-server:8086/eureka
+    depends_on:
+      eureka-server:
+        condition: service_healthy
+      categoria-service:
+        condition: service_started
+      producto-service:
+        condition: service_started
+    restart: on-failure
+
+networks:
+  microservices-network:
+    driver: bridge
+
+volumes:
+  categorias-data:
+  productos-data:
